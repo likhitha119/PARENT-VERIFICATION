@@ -6,6 +6,7 @@ import Header from '../components/Header';
 import { useAuth } from '../context/AuthContext';
 import { Document, Packer, Paragraph, Table, TableCell, TableRow, AlignmentType } from 'docx';
 import { saveAs } from 'file-saver';
+import { apiFetch } from '../config/api';
 
 const PAYMENT_HISTORY = [
   { id: "#TXN-8821", date: "Oct 12, 2023", desc: "Term 2 Tuition Fee", amount: "₹1,50,000", status: "Success" },
@@ -31,7 +32,7 @@ const Financials = () => {
   const fetchCourses = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:5000/api/courses');
+      const response = await apiFetch('/api/courses');
       const data = await response.json();
       setCourses(data.courses);
       setStudentInfo(data.student);
@@ -45,7 +46,7 @@ const Financials = () => {
   const handleCourseClick = async (courseId) => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:5000/api/course-fees/${courseId}`);
+      const response = await apiFetch(`/api/course-fees/${courseId}`);
       const data = await response.json();
       setCourseFeeDetails(data);
       setSelectedCourse(courseId);

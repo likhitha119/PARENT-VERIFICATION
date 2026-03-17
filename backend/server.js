@@ -3,6 +3,7 @@ import cors from "cors";
 import crypto from "crypto";
 import dotenv from "dotenv";
 import nodemailer from "nodemailer";
+import jwt from "jsonwebtoken";
 import { MongoClient } from "mongodb";
 
 dotenv.config();
@@ -12,9 +13,48 @@ const PORT = process.env.PORT || 5000;
 const mongoUri = process.env.MONGO_URI;
 const mongoDbName =
   process.env.DB_NAME || "parent-verification-system";
+const jwtSecret = process.env.JWT_SECRET;
+const jwtExpiresIn = process.env.JWT_EXPIRES_IN || "1h";
+const corsOrigins =
+  process.env.CORS_ORIGINS ||
+  "http://localhost:5173,https://parent-d4q3.onrender.com";
+const allowedOrigins = corsOrigins
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
 
-app.use(cors({ origin: "http://localhost:5173" }));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error("Not allowed by CORS"));
+    },
+  })
+);
 app.use(express.json());
+
+/* ---------------- AUTH HELPERS ---------------- */
+// Attach decoded token to req.user when a valid Bearer token is present.
+// If no token is sent, behavior remains unchanged; invalid tokens return 401.
+const optionalAuth = (req, res, next) => {
+  if (!jwtSecret) return next();
+
+  const authHeader = req.headers.authorization || "";
+  if (!authHeader.startsWith("Bearer ")) return next();
+
+  const token = authHeader.slice("Bearer ".length);
+  try {
+    req.user = jwt.verify(token, jwtSecret);
+    return next();
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+};
+
+app.use(optionalAuth);
 
 /* ---------------- OTP STORE ---------------- */
 
@@ -418,6 +458,22 @@ app.post("/api/verify-otp", (req, res) => {
 
   OTP_STORE.delete(normalizedEmail);
 
+  let token = null;
+  if (jwtSecret) {
+    try {
+      token = jwt.sign(
+        {
+          email: normalizedEmail,
+          registrationNumber: registrationNumber || student.id,
+        },
+        jwtSecret,
+        { expiresIn: jwtExpiresIn }
+      );
+    } catch (err) {
+      console.error("Failed to sign JWT:", err.message);
+    }
+  }
+
   logLogin({
     email: normalizedEmail,
     registrationNumber: registrationNumber || student.id,
@@ -429,6 +485,7 @@ app.post("/api/verify-otp", (req, res) => {
     verified: true,
     registrationNumber: registrationNumber || student.id,
     email: normalizedEmail,
+    ...(token ? { token } : {}),
   });
 });
 
